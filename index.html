@@ -1,0 +1,160 @@
+﻿
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MY WEB OS</title>
+<style>
+*{box-sizing:border-box}
+body{
+ margin:0;
+ font-family:Arial;
+ color:white;
+ background:linear-gradient(135deg,#090919,#171044,#092b50);
+ min-height:100vh;
+}
+header{
+ padding:25px;
+ font-size:27px;
+ font-weight:bold;
+}
+.desktop{
+ display:grid;
+ grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+ gap:20px;
+ padding:25px;
+}
+.card{
+ background:#ffffff12;
+ border:1px solid #ffffff30;
+ border-radius:18px;
+ padding:25px;
+ backdrop-filter:blur(15px);
+}
+.card h2{color:#70dfff}
+button{
+ background:#6655ff;
+ border:0;
+ color:white;
+ padding:12px 20px;
+ border-radius:10px;
+ cursor:pointer;
+ margin:5px;
+}
+input,textarea{
+ width:100%;
+ padding:12px;
+ border:0;
+ border-radius:9px;
+ margin:7px 0;
+ background:#ffffff20;
+ color:white;
+}
+textarea{height:120px}
+#terminal{
+ background:#050510;
+ padding:15px;
+ border-radius:12px;
+ min-height:120px;
+ font-family:monospace;
+ overflow-wrap:anywhere;
+}
+footer{
+ position:fixed;
+ bottom:0;
+ width:100%;
+ padding:15px;
+ text-align:center;
+ background:#080819dd;
+}
+</style>
+</head>
+<body>
+
+<header>🚀 MY WEB OS</header>
+
+<div class="desktop">
+
+<div class="card">
+<h2>🕒 Часы</h2>
+<h1 id="clock">00:00:00</h1>
+<p id="date"></p>
+</div>
+
+<div class="card">
+<h2>🧮 Калькулятор</h2>
+<input id="a" type="number" placeholder="Первое число">
+<input id="b" type="number" placeholder="Второе число">
+<button onclick="calc('+')">+</button>
+<button onclick="calc('-')">-</button>
+<button onclick="calc('*')">×</button>
+<button onclick="calc('/')">÷</button>
+<h3 id="result">Результат: 0</h3>
+</div>
+
+<div class="card">
+<h2>📝 Заметки</h2>
+<textarea id="notes" placeholder="Пиши здесь..."></textarea>
+<button onclick="save()">Сохранить</button>
+<p id="saved"></p>
+</div>
+
+<div class="card">
+<h2>💻 Терминал</h2>
+<div id="terminal">MY WEB OS v1.0<br>Напиши help</div>
+<input id="command" placeholder="Введи команду">
+<button onclick="run()">Выполнить</button>
+</div>
+
+</div>
+
+<footer>MY WEB OS | Created by Me © 2026</footer>
+
+<script>
+function update(){
+ let d=new Date();
+ document.getElementById("clock").textContent=
+ d.toLocaleTimeString();
+ document.getElementById("date").textContent=
+ d.toLocaleDateString();
+}
+setInterval(update,1000);
+update();
+
+function calc(op){
+ let a=Number(document.getElementById("a").value);
+ let b=Number(document.getElementById("b").value);
+ let r=0;
+ if(op==="+")r=a+b;
+ if(op==="-")r=a-b;
+ if(op==="*")r=a*b;
+ if(op==="/")r=b===0?"На ноль делить нельзя":a/b;
+ document.getElementById("result").textContent="Результат: "+r;
+}
+
+document.getElementById("notes").value=
+localStorage.getItem("myNotes")||"";
+
+function save(){
+ localStorage.setItem("myNotes",
+ document.getElementById("notes").value);
+ document.getElementById("saved").textContent="Сохранено!";
+}
+
+function run(){
+ let c=document.getElementById("command").value.trim();
+ let t=document.getElementById("terminal");
+ let output="";
+ if(c==="help")output="help, date, time, hello, clear";
+ else if(c==="hello")output="Привет! Добро пожаловать!";
+ else if(c==="date")output=new Date().toLocaleDateString();
+ else if(c==="time")output=new Date().toLocaleTimeString();
+ else if(c==="clear"){t.innerHTML="";return;}
+ else output="Неизвестная команда: "+c;
+ t.innerHTML+="<br>> "+c+"<br>"+output;
+ document.getElementById("command").value="";
+}
+</script>
+</body>
+</html>
