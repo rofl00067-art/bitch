@@ -1,0 +1,304 @@
+﻿
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3D Runner</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;overflow:hidden;background:#87ceeb;font-family:Arial;color:white}
+#hud{position:fixed;top:15px;left:15px;z-index:5;display:flex;gap:10px;flex-wrap:wrap}
+.info{background:#10243dcc;padding:12px 16px;border-radius:12px;font-weight:bold}
+#help{position:fixed;right:12px;top:15px;background:#10243dcc;padding:12px;border-radius:12px;z-index:5;font-size:13px;line-height:1.6}
+#panel{position:fixed;inset:0;z-index:10;display:grid;place-items:center;background:#06101dcc}
+#card{background:#142d50;padding:30px;border-radius:20px;text-align:center;width:min(90%,420px)}
+button{border:0;border-radius:12px;padding:14px 22px;background:#39a5ff;color:#041326;font-size:18px;font-weight:bold;cursor:pointer}
+#mobile{position:fixed;bottom:20px;left:0;right:0;z-index:6;display:flex;justify-content:space-between;padding:0 20px}
+#mobile button{width:65px;height:58px;padding:0;font-size:25px}
+@media(min-width:800px){#mobile{display:none}}
+</style>
+</head>
+<body>
+
+<div id="hud">
+ <div class="info">⭐ Очки: <span id="score">0</span></div>
+ <div class="info">🪙 Монеты: <span id="coins">0</span></div>
+ <div class="info">❤️ Жизни: <span id="lives">3</span></div>
+</div>
+
+<div id="help">
+ ← → или A/D — движение<br>
+ ПРОБЕЛ или ↑ — прыжок<br>
+ Собирай монеты!
+</div>
+
+<div id="panel">
+ <div id="card">
+  <h1>🏃 3D RUNNER</h1>
+  <p>Беги по дороге, собирай монеты и избегай препятствий!</p>
+  <button id="start">НАЧАТЬ ИГРУ</button>
+ </div>
+</div>
+
+<div id="mobile">
+ <div>
+  <button id="left">◀</button>
+  <button id="right">▶</button>
+ </div>
+ <button id="jump">⬆</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+if(!window.THREE){
+ document.querySelector("#card p").textContent="Нет интернета. Подключись к интернету и обнови страницу.";
+ document.querySelector("#start").style.display="none";
+ throw new Error("Three.js не загрузился");
+}
+
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x87ceeb);
+scene.fog=new THREE.Fog(0x87ceeb,25,110);
+
+const camera=new THREE.PerspectiveCamera(65,innerWidth/innerHeight,.1,150);
+camera.position.set(0,5,9);
+camera.lookAt(0,1,-8);
+
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth,innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled=true;
+document.body.appendChild(renderer.domElement);
+
+scene.add(new THREE.HemisphereLight(0xffffff,0x47708b,1.5));
+const sun=new THREE.DirectionalLight(0xffffff,1.4);
+sun.position.set(-5,12,7);
+sun.castShadow=true;
+scene.add(sun);
+
+const material=c=>new THREE.MeshStandardMaterial({color:c});
+const road=new THREE.Mesh(
+ new THREE.BoxGeometry(9,.25,140),material(0x303b4c));
+road.position.set(0,-.18,-50);
+road.receiveShadow=true;
+scene.add(road);
+
+const ground=new THREE.Mesh(
+ new THREE.BoxGeometry(200,.2,150),material(0x25834e));
+ground.position.set(0,-.4,-50);
+scene.add(ground);
+
+// Разметка дороги
+for(let z=5;z>-120;z-=7){
+ for(let x of [-1.5,1.5]){
+  const dash=new THREE.Mesh(
+   new THREE.BoxGeometry(.12,.03,3),material(0xffffff));
+  dash.position.set(x,-.035,z);
+  scene.add(dash);
+ }
+}
+
+// Деревья
+for(let i=0;i<35;i++){
+ let z=5-i*4;
+ for(let side of [-1,1]){
+  let x=side*(7+Math.random()*4);
+  const trunk=new THREE.Mesh(
+   new THREE.CylinderGeometry(.2,.25,1.4,8),material(0x68452b));
+  trunk.position.set(x,.3,z);
+  scene.add(trunk);
+
+  const crown=new THREE.Mesh(
+   new THREE.ConeGeometry(1,2.3,8),material(0x17633e));
+  crown.position.set(x,1.9,z);
+  scene.add(crown);
+ }
+}
+
+// Игрок
+const player=new THREE.Group();
+scene.add(player);
+
+const body=new THREE.Mesh(
+ new THREE.BoxGeometry(.8,1.1,.55),material(0x1677ff));
+body.position.y=1.05;
+body.castShadow=true;
+player.add(body);
+
+const head=new THREE.Mesh(
+ new THREE.SphereGeometry(.34,18,14),material(0xffc99a));
+head.position.y=1.85;
+player.add(head);
+
+const legs=[];
+for(let x of [-.22,.22]){
+ const leg=new THREE.Mesh(
+  new THREE.BoxGeometry(.22,.65,.25),material(0x17233a));
+ leg.position.set(x,.38,0);
+ player.add(leg);
+ legs.push(leg);
+}
+player.position.set(0,0,3);
+
+const lanes=[-2.5,0,2.5];
+let lane=1;
+let jumping=false;
+let velocityY=0;
+let score=0,coins=0,lives=3;
+let running=false;
+let speed=.35;
+let spawnTimer=0,coinTimer=0;
+let objects=[];
+let lastTime=0;
+
+const coinMaterial=new THREE.MeshStandardMaterial({
+ color:0xffcf27,metalness:.7,roughness:.2
+});
+
+function updateHUD(){
+ document.getElementById("score").textContent=score;
+ document.getElementById("coins").textContent=coins;
+ document.getElementById("lives").textContent=lives;
+}
+
+function moveLeft(){lane=Math.max(0,lane-1)}
+function moveRight(){lane=Math.min(2,lane+1)}
+function jump(){
+ if(!jumping){
+  jumping=true;
+  velocityY=.23;
+ }
+}
+
+function obstacle(){
+ const mesh=new THREE.Mesh(
+  new THREE.BoxGeometry(1.25,1.25,1.1),
+  material(0xe34b4b));
+ mesh.position.set(lanes[Math.floor(Math.random()*3)],.52,-90);
+ scene.add(mesh);
+ objects.push({mesh,type:"obstacle"});
+}
+
+function makeCoin(){
+ const mesh=new THREE.Mesh(
+  new THREE.TorusGeometry(.42,.14,10,20),coinMaterial);
+ mesh.position.set(lanes[Math.floor(Math.random()*3)],1.2,-90);
+ scene.add(mesh);
+ objects.push({mesh,type:"coin"});
+}
+
+document.addEventListener("keydown",e=>{
+ if(e.key==="ArrowLeft"||e.key.toLowerCase()==="a")moveLeft();
+ if(e.key==="ArrowRight"||e.key.toLowerCase()==="d")moveRight();
+ if(e.key===" "||e.key==="ArrowUp")jump();
+});
+
+document.getElementById("left").onclick=moveLeft;
+document.getElementById("right").onclick=moveRight;
+document.getElementById("jump").onclick=jump;
+
+function endGame(){
+ running=false;
+ document.getElementById("panel").style.display="grid";
+ document.getElementById("card").innerHTML=
+ `<h1>ИГРА ОКОНЧЕНА!</h1>
+ <h2>⭐ Очки: ${score}</h2>
+ <h2>🪙 Монеты: ${coins}</h2>
+ <button onclick="location.reload()">ИГРАТЬ СНОВА</button>`;
+}
+
+function animate(time){
+ requestAnimationFrame(animate);
+ if(!running){
+  renderer.render(scene,camera);
+  return;
+ }
+
+ const dt=Math.min((time-lastTime)/16.67,2)||1;
+ lastTime=time;
+
+ // Движение игрока
+ player.position.x+=(lanes[lane]-player.position.x)*.2*dt;
+ if(jumping){
+  player.position.y+=velocityY*dt;
+  velocityY-=.014*dt;
+  if(player.position.y<=0){
+   player.position.y=0;
+   jumping=false;
+  }
+ }
+
+ legs[0].rotation.x=Math.sin(time*.018)*.7;
+ legs[1].rotation.x=-Math.sin(time*.018)*.7;
+
+ score+=Math.floor(speed*dt);
+ speed=Math.min(.75,speed+.00005*dt);
+ spawnTimer+=dt;
+ coinTimer+=dt;
+
+ if(spawnTimer>Math.max(24,65-speed*40)){
+  obstacle();
+  spawnTimer=0;
+ }
+ if(coinTimer>42){
+  makeCoin();
+  coinTimer=0;
+ }
+
+ for(let i=objects.length-1;i>=0;i--){
+  const o=objects[i];
+  o.mesh.position.z+=speed*dt;
+
+  if(o.type==="coin")o.mesh.rotation.y+=.08*dt;
+
+  const close=Math.abs(o.mesh.position.z-player.position.z)<1;
+  const sameLane=Math.abs(o.mesh.position.x-player.position.x)<1.1;
+
+  if(close&&sameLane){
+   if(o.type==="coin"){
+    coins++;
+    score+=50;
+    scene.remove(o.mesh);
+    objects.splice(i,1);
+    continue;
+   }
+   if(o.type==="obstacle"&&player.position.y<.8){
+    lives--;
+    updateHUD();
+    scene.remove(o.mesh);
+    objects.splice(i,1);
+    if(lives<=0){endGame();break;}
+    continue;
+   }
+  }
+
+  if(o.mesh.position.z>10){
+   scene.remove(o.mesh);
+   objects.splice(i,1);
+  }
+ }
+
+ updateHUD();
+ camera.position.x+=(player.position.x*.25-camera.position.x)*.04;
+ camera.lookAt(player.position.x*.15,1,-8);
+ renderer.render(scene,camera);
+}
+
+document.getElementById("start").onclick=()=>{
+ document.getElementById("panel").style.display="none";
+ running=true;
+ lastTime=performance.now();
+ requestAnimationFrame(animate);
+};
+
+requestAnimationFrame(animate);
+
+window.addEventListener("resize",()=>{
+ camera.aspect=innerWidth/innerHeight;
+ camera.updateProjectionMatrix();
+ renderer.setSize(innerWidth,innerHeight);
+});
+</script>
+</body>
+</html>
